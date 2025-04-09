@@ -6,45 +6,47 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { createObjectCsvWriter } = require('csv-writer');
+require('dotenv').config(); // Added for environment variables
 const User = require('./models/User');
 const Barcode = require('./models/Barcode');
 
 const app = express();
-// CORS configuration
-// app.use(cors({
-//   origin: [
-//     'http://localhost:8081', // Expo web client
-//     'http://localhost:19006', // Expo dev server
-//     'https://yourfrontendurl.com', // Replace with your frontend URL
-//   ],
-//   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-//   credentials: true,
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-// }));
 
-// Handle preflight OPTIONS requests
+// Corrected CORS configuration
 app.use(cors({
-  origin: 'http://localhost:8081', // Allow requests from your React Native app
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: [
+    'http://localhost:8081', // Expo web client
+    'http://localhost:19006', // Expo dev server
+    'https://yourfrontendurl.com', // Replace with your production frontend URL
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Include OPTIONS for preflight
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // Allow credentials if needed
+}));
+
+// Explicitly handle preflight OPTIONS requests for all routes
+app.options('*', cors({
+  origin: [
+    'http://localhost:8081',
+    'http://localhost:19006',
+    'https://yourfrontendurl.com',
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 
 app.use(express.json());
 
-// Comment out local MongoDB connection
-// mongoose.connect('mongodb://localhost:27017/barcode', {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true,
-// }).then(() => console.log('MongoDB connected'));
-
-// Use MongoDB Atlas connection
+// MongoDB Atlas connection using environment variable
 mongoose.connect(
-  "mongodb+srv://balmukundoptico:lets@12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector",
+  process.env.MONGODB_URI || "mongodb+srv://balmukundoptico:lets@12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector",
   {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   }
-).then(() => console.log('MongoDB Atlas connected'));
+).then(() => console.log('MongoDB Atlas connected'))
+ .catch(err => console.error('MongoDB connection error:', err));
 
 const JWT_SECRET = 'your-secret-key';
 let pointsPerScan = 50; // Default points per scan, adjustable by admin
@@ -322,5 +324,6 @@ app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-const PORT = 5000;
+// Use Render's assigned PORT
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
