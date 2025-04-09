@@ -6,39 +6,43 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { createObjectCsvWriter } = require('csv-writer');
-require('dotenv').config(); // Added for environment variables
+require('dotenv').config(); // Ensure dotenv is included
 const User = require('./models/User');
 const Barcode = require('./models/Barcode');
 
 const app = express();
 
-// Corrected CORS configuration
-app.use(cors({
-  origin: [
-    'http://localhost:8081', // Expo web client
-    'http://localhost:19006', // Expo dev server
-    'https://yourfrontendurl.com', // Replace with your production frontend URL
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Include OPTIONS for preflight
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true, // Allow credentials if needed
-}));
+// Enhanced CORS configuration
+const allowedOrigins = [
+  'http://localhost:8081', // Expo web client
+  'http://localhost:19006', // Expo dev server
+  'exp://192.168.31.124:19000', // Replace with your actual Expo dev client IP (check Expo logs)
+  'https://yourfrontendurl.com', // Replace with your production frontend URL
+];
 
-// Explicitly handle preflight OPTIONS requests for all routes
-app.options('*', cors({
-  origin: [
-    'http://localhost:8081',
-    'http://localhost:19006',
-    'https://yourfrontendurl.com',
-  ],
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log(`Blocked CORS request from origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-}));
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Handle preflight requests for all routes
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 
-// MongoDB Atlas connection using environment variable
+// MongoDB Atlas connection
 mongoose.connect(
   process.env.MONGODB_URI || "mongodb+srv://balmukundoptico:lets@12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector",
   {
@@ -48,7 +52,7 @@ mongoose.connect(
 ).then(() => console.log('MongoDB Atlas connected'))
  .catch(err => console.error('MongoDB connection error:', err));
 
-const JWT_SECRET = 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 let pointsPerScan = 50; // Default points per scan, adjustable by admin
 
 const authMiddleware = (req, res, next) => {
