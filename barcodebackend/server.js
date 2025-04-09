@@ -13,12 +13,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect('mongodb://localhost:27017/barcode', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-}).then(() => console.log('MongoDB connected'));
+// Comment out local MongoDB connection
+// mongoose.connect('mongodb://localhost:27017/barcode', {
+//   useNewUrlParser: true,
+//   useUnifiedTopology: true,
+// }).then(() => console.log('MongoDB connected'));
+
+// Use MongoDB Atlas connection
+mongoose.connect(
+  "mongodb+srv://balmukundoptico:lets@12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector",
+  {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  }
+).then(() => console.log('MongoDB Atlas connected'));
 
 const JWT_SECRET = 'your-secret-key';
+let pointsPerScan = 50; // Default points per scan, adjustable by admin
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers['authorization'];
@@ -107,17 +118,17 @@ app.post('/scan', authMiddleware, async (req, res) => {
   try {
     const existingBarcode = await Barcode.findOne({ value });
     if (existingBarcode) return res.status(400).json({ message: 'Barcode expired.' });
-    const barcode = new Barcode({ value, userId, location, pointsAwarded: 50 });
+    const barcode = new Barcode({ value, userId, location, pointsAwarded: pointsPerScan });
     await barcode.save();
     const user = await User.findById(userId);
-    user.points += 50;
+    user.points += pointsPerScan;
     await user.save();
 
     if (user.notificationToken) {
       await sendPushNotification(
         user.notificationToken,
         'Barcode Scanned',
-        `You earned 50 points! Total: ${user.points}`
+        `You earned ${pointsPerScan} points! Total: ${user.points}`
       );
     }
 
@@ -158,9 +169,66 @@ app.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
+app.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { name, email, location, points } = req.body;
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    user.name = name || user.name;
+    user.email = email || user.email;
+    user.location = location || user.location;
+    user.points = points !== undefined ? points : user.points;
+    await user.save();
+    res.json({ message: 'User updated successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    await Barcode.deleteMany({ userId: req.params.id }); // Delete user’s barcodes
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.put('/users/:id/reset-points', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    user.points = 0;
+    await user.save();
+
+    if (user.notificationToken) {
+      await sendPushNotification(
+        user.notificationToken,
+        'Points Reset',
+        'Your points have been reset by admin.'
+      );
+    }
+
+    res.json({ message: 'Points reset successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
 app.get('/barcodes', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const barcodes = await Barcode.find().populate('userId', 'name email');
+    res.json(barcodes);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/barcodes/user/:userId', authMiddleware, async (req, res) => {
+  try {
+    const barcodes = await Barcode.find({ userId: req.params.userId });
     res.json(barcodes);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -172,6 +240,34 @@ app.delete('/barcodes/:id', authMiddleware, adminMiddleware, async (req, res) =>
     const barcode = await Barcode.findByIdAndDelete(req.params.id);
     if (!barcode) return res.status(404).json({ message: 'Barcode not found' });
     res.json({ message: 'Barcode deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.delete('/barcodes', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await Barcode.deleteMany({});
+    res.json({ message: 'All barcodes deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.delete('/barcodes/user/:userId', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await Barcode.deleteMany({ userId: req.params.userId });
+    res.json({ message: 'User barcodes deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.put('/settings/points-per-scan', authMiddleware, adminMiddleware, async (req, res) => {
+  const { points } = req.body;
+  try {
+    pointsPerScan = points;
+    res.json({ message: 'Points per scan updated', pointsPerScan });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
