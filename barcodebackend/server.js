@@ -1,0 +1,212 @@
+// barcode/barcodebackend/server.js
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const axios = require('axios');
+const { createObjectCsvWriter } = require('csv-writer');
+const User = require('./models/User');
+const Barcode = require('./models/Barcode');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+mongoose.connect('mongodb://localhost:27017/barcode', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => console.log('MongoDB connected'));
+
+const JWT_SECRET = 'your-secret-key';
+
+const authMiddleware = (req, res, next) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.status(401).json({ message: 'No token provided' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+const adminMiddleware = (req, res, next) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  next();
+};
+
+const sendPushNotification = async (token, title, body) => {
+  const message = {
+    to: token,
+    sound: 'default',
+    title,
+    body,
+    data: { someData: 'goes here' },
+  };
+  try {
+    await axios.post('https://exp.host/--/api/v2/push/send', message, {
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log(`Notification sent to ${token}`);
+  } catch (error) {
+    console.error('Error sending notification:', error.message);
+  }
+};
+
+app.post('/register', async (req, res) => {
+  const { name, email, password, role, location, notificationToken } = req.body;
+  try {
+    if (role === 'admin') {
+      const adminExists = await User.findOne({ role: 'admin' });
+      if (adminExists) return res.status(400).json({ message: 'Admin account already exists.' });
+    }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role,
+      location,
+      status: role === 'admin' ? 'approved' : 'pending',
+      notificationToken,
+    });
+    await user.save();
+    res.status(201).json({
+      message: role === 'user' ? 'Your account is pending approval by admin.' : 'Admin registered successfully.',
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.post('/login', async (req, res) => {
+  const { email, password, role } = req.body;
+  try {
+    const user = await User.findOne({ email, role });
+    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+    if (user.status === 'pending') return res.status(403).json({ message: 'Account pending approval' });
+    if (user.status === 'disapproved') return res.status(403).json({ message: 'Account disapproved' });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token, user: { id: user._id, name: user.name, role: user.role, points: user.points } });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.post('/scan', authMiddleware, async (req, res) => {
+  const { value, location } = req.body;
+  const userId = req.user.id;
+  try {
+    const existingBarcode = await Barcode.findOne({ value });
+    if (existingBarcode) return res.status(400).json({ message: 'Barcode expired.' });
+    const barcode = new Barcode({ value, userId, location, pointsAwarded: 50 });
+    await barcode.save();
+    const user = await User.findById(userId);
+    user.points += 50;
+    await user.save();
+
+    if (user.notificationToken) {
+      await sendPushNotification(
+        user.notificationToken,
+        'Barcode Scanned',
+        `You earned 50 points! Total: ${user.points}`
+      );
+    }
+
+    res.json({ message: 'Barcode scanned successfully', points: user.points });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.put('/users/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
+  const { status } = req.body;
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    user.status = status;
+    await user.save();
+
+    if (user.notificationToken) {
+      await sendPushNotification(
+        user.notificationToken,
+        'Account Status Updated',
+        `Your account has been ${status}.`
+      );
+    }
+
+    res.json({ message: `User ${status} successfully` });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
+    res.json(users);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/barcodes', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const barcodes = await Barcode.find().populate('userId', 'name email');
+    res.json(barcodes);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.delete('/barcodes/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const barcode = await Barcode.findByIdAndDelete(req.params.id);
+    if (!barcode) return res.status(404).json({ message: 'Barcode not found' });
+    res.json({ message: 'Barcode deleted successfully' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const barcodes = await Barcode.find().populate('userId', 'name email');
+    const csvWriter = createObjectCsvWriter({
+      path: 'barcodes_export.csv',
+      header: [
+        { id: 'value', title: 'Barcode Value' },
+        { id: 'userName', title: 'User Name' },
+        { id: 'userEmail', title: 'User Email' },
+        { id: 'pointsAwarded', title: 'Points Awarded' },
+        { id: 'location', title: 'Location' },
+        { id: 'timestamp', title: 'Timestamp' },
+      ],
+    });
+
+    const records = barcodes.map(barcode => ({
+      value: barcode.value,
+      userName: barcode.userId.name,
+      userEmail: barcode.userId.email,
+      pointsAwarded: barcode.pointsAwarded,
+      location: barcode.location,
+      timestamp: barcode.createdAt.toISOString(),
+    }));
+
+    await csvWriter.writeRecords(records);
+    res.download('barcodes_export.csv');
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to export barcodes', error: error.message });
+  }
+});
+
+const PORT = 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
