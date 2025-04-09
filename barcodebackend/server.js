@@ -14,45 +14,33 @@ const app = express();
 
 // Enhanced CORS configuration with logging for debugging
 const allowedOrigins = [
-  'http://localhost:8081', // Expo web client
-  'http://localhost:19006', // Expo dev server
-  'exp://192.168.31.124:19000', // Replace with your actual Expo dev client IP
-  'https://yourfrontendurl.com', // Replace with your production frontend URL
+  'http://localhost:8081',
+  'http://localhost:19006',
+  'exp://192.168.31.124:19000',
+  'https://yourfrontendurl.com'
 ];
 
+// Middleware to log requests for debugging
 app.use((req, res, next) => {
-  console.log(`Request Origin: ${req.headers.origin}, Method: ${req.method}`);
+  console.log(`Incoming ${req.method} request from ${req.headers.origin}`);
   next();
 });
 
+// Simplified CORS configuration
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      console.log(`CORS allowed for origin: ${origin}`);
-      callback(null, true);
-    } else {
-      console.log(`CORS blocked for origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: true
 }));
 
+// Explicit OPTIONS handler
 app.options('*', cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: true
 }));
-
 app.use(express.json());
 
 // MongoDB Atlas connection
