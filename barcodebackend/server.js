@@ -23,15 +23,10 @@ app.use(cors({
 }));
 
 // Handle preflight OPTIONS requests
-app.options('*', cors({
-  origin: [
-    'http://localhost:8081',
-    'http://localhost:19006',
-    'https://yourfrontendurl.com',
-  ],
+app.use(cors({
+  origin: 'http://localhost:8081', // Allow requests from your React Native app
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
