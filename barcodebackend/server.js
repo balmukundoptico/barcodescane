@@ -11,16 +11,16 @@ const Barcode = require('./models/Barcode');
 
 const app = express();
 // CORS configuration
-app.use(cors({
-  origin: [
-    'http://localhost:8081', // Expo web client
-    'http://localhost:19006', // Expo dev server
-    'https://yourfrontendurl.com', // Replace with your frontend URL
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+// app.use(cors({
+//   origin: [
+//     'http://localhost:8081', // Expo web client
+//     'http://localhost:19006', // Expo dev server
+//     'https://yourfrontendurl.com', // Replace with your frontend URL
+//   ],
+//   methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//   credentials: true,
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+// }));
 
 // Handle preflight OPTIONS requests
 app.use(cors({
