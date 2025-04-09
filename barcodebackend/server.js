@@ -6,24 +6,43 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { createObjectCsvWriter } = require('csv-writer');
-require('dotenv').config(); // Ensure dotenv is included
+require('dotenv').config();
 const User = require('./models/User');
 const Barcode = require('./models/Barcode');
 
 const app = express();
 
-// Enhanced CORS configuration
+// Enhanced CORS configuration with logging for debugging
 const allowedOrigins = [
-  'http://localhost:8081',
-  'http://localhost:19006',
+  'http://localhost:8081', // Expo web client
+  'http://localhost:19006', // Expo dev server
   'exp://192.168.31.124:19000', // Replace with your actual Expo dev client IP
-  'http://localhost:3000',
-  'https://yourfrontenddomain.com' // Your production frontend domain
+  'https://yourfrontendurl.com', // Replace with your production frontend URL
 ];
 
-const corsOptions = {
+app.use((req, res, next) => {
+  console.log(`Request Origin: ${req.headers.origin}, Method: ${req.method}`);
+  next();
+});
+
+app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      console.log(`CORS allowed for origin: ${origin}`);
+      callback(null, true);
+    } else {
+      console.log(`CORS blocked for origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
+
+app.options('*', cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -31,14 +50,8 @@ const corsOptions = {
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-};
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
+  credentials: true,
+}));
 
 app.use(express.json());
 
@@ -53,7 +66,7 @@ mongoose.connect(
  .catch(err => console.error('MongoDB connection error:', err));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-let pointsPerScan = 50; // Default points per scan, adjustable by admin
+let pointsPerScan = 50;
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers['authorization'];
@@ -213,7 +226,7 @@ app.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    await Barcode.deleteMany({ userId: req.params.id }); // Delete user’s barcodes
+    await Barcode.deleteMany({ userId: req.params.id });
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -328,6 +341,5 @@ app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-// Use Render's assigned PORT
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
