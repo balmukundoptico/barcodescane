@@ -10,7 +10,30 @@ const User = require('./models/User');
 const Barcode = require('./models/Barcode');
 
 const app = express();
-app.use(cors());
+// CORS configuration
+app.use(cors({
+  origin: [
+    'http://localhost:8081', // Expo web client
+    'http://localhost:19006', // Expo dev server
+    'https://yourfrontendurl.com', // Replace with your frontend URL
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// Handle preflight OPTIONS requests
+app.options('*', cors({
+  origin: [
+    'http://localhost:8081',
+    'http://localhost:19006',
+    'https://yourfrontendurl.com',
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 app.use(express.json());
 
 // Comment out local MongoDB connection
