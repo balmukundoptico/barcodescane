@@ -6,29 +6,55 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { createObjectCsvWriter } = require('csv-writer');
+require('dotenv').config();
 const User = require('./models/User');
 const Barcode = require('./models/Barcode');
 
 const app = express();
-app.use(cors());
+
+// Enhanced CORS configuration with logging for debugging
+const allowedOrigins = [
+  'http://localhost:8081',
+  'http://localhost:19006',
+  'exp://192.168.31.124:19000',
+  'https://yourfrontendurl.com'
+];
+
+// Middleware to log requests for debugging
+app.use((req, res, next) => {
+  console.log(`Incoming ${req.method} request from ${req.headers.origin}`);
+  next();
+});
+
+// Simplified CORS configuration
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// Explicit OPTIONS handler
+app.options('*', cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json());
 
-// Comment out local MongoDB connection
-// mongoose.connect('mongodb://localhost:27017/barcode', {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true,
-// }).then(() => console.log('MongoDB connected'));
-
-// Use MongoDB Atlas connection
+// MongoDB Atlas connection
 mongoose.connect(
-  "mongodb+srv://balmukundoptico:lets@12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector",
+  process.env.MONGODB_URI || "mongodb+srv://balmukundoptico:lets@12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector",
   {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   }
-).then(() => console.log('MongoDB Atlas connected'));
-const JWT_SECRET = 'your-secret-key';
-let pointsPerScan = 50; // Default points per scan, adjustable by admin
+).then(() => console.log('MongoDB Atlas connected'))
+ .catch(err => console.error('MongoDB connection error:', err));
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+let pointsPerScan = 50;
 
 const authMiddleware = (req, res, next) => {
   const token = req.headers['authorization'];
@@ -188,7 +214,7 @@ app.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    await Barcode.deleteMany({ userId: req.params.id }); // Delete user’s barcodes
+    await Barcode.deleteMany({ userId: req.params.id });
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -303,5 +329,5 @@ app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
