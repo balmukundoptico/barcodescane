@@ -21,17 +21,30 @@ app.use(cors({
 
 app.use(express.json());
 
-// Test route to verify CORS
-app.get('/test', (req, res) => {
-  res.json({ message: 'Server is live' });
-});
-
 // MongoDB Atlas connection
 mongoose.connect('mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.mongodb.net', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-  .then(() => console.log('MongoDB Atlas connected'))
+  .then(async () => {
+    console.log('MongoDB Atlas connected');
+    // Ensure single admin exists
+    const adminEmail = 'krishna@gmail.com';
+    const existingAdmin = await User.findOne({ email: adminEmail, role: 'admin' });
+    if (!existingAdmin) {
+      const hashedPassword = await bcrypt.hash('krishna123', 10);
+      const admin = new User({
+        name: 'krishna',
+        email: adminEmail,
+        password: hashedPassword,
+        role: 'admin',
+        location: 'bhopal',
+        status: 'approved',
+      });
+      await admin.save();
+      console.log('Permanent admin created: krishna');
+    }
+  })
   .catch((err) => console.log('MongoDB Atlas connection error:', err));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -81,22 +94,25 @@ app.post('/register', async (req, res) => {
   const { name, email, password, role, location, notificationToken } = req.body;
   try {
     if (role === 'admin') {
+      // Block additional admin registration
       const adminExists = await User.findOne({ role: 'admin' });
-      if (adminExists) return res.status(400).json({ message: 'Admin account already exists.' });
+      if (adminExists) {
+        return res.status(403).json({ message: 'Only one admin is allowed. Admin already exists.' });
+      }
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
       email,
       password: hashedPassword,
-      role,
+      role: role === 'admin' ? 'user' : role, // Force non-admin roles
       location,
       status: role === 'admin' ? 'approved' : 'pending',
       notificationToken,
     });
     await user.save();
     res.status(201).json({
-      message: role === 'user' ? 'Your account is pending approval by admin.' : 'Admin registered successfully.',
+      message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
     });
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -150,6 +166,9 @@ app.put('/users/:id/status', authMiddleware, adminMiddleware, async (req, res) =
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.email === 'krishna@gmail.com' && user.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot modify permanent admin status.' });
+    }
     user.status = status;
     await user.save();
 
@@ -181,6 +200,9 @@ app.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.email === 'krishna@gmail.com' && user.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot modify permanent admin.' });
+    }
     user.name = name || user.name;
     user.email = email || user.email;
     user.location = location || user.location;
@@ -194,8 +216,12 @@ app.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
 
 app.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.email === 'krishna@gmail.com' && user.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot delete permanent admin.' });
+    }
+    await User.findByIdAndDelete(req.params.id);
     await Barcode.deleteMany({ userId: req.params.id });
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
@@ -207,6 +233,9 @@ app.put('/users/:id/reset-points', authMiddleware, adminMiddleware, async (req, 
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.email === 'krishna@gmail.com' && user.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot reset points of permanent admin.' });
+    }
     user.points = 0;
     await user.save();
 
