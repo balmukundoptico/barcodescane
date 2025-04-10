@@ -12,22 +12,18 @@ const Barcode = require('./models/Barcode');
 
 const app = express();
 
-// Simplified CORS configuration (proven working from your other project)
+// Simplified CORS configuration
 app.use(cors({
-  origin: 'http://localhost:8081', // Allow requests from your React Native app
+  origin: 'http://localhost:8081',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json());
 
-// MongoDB Atlas connection
+// MongoDB Atlas connection (corrected string, removed deprecated options)
 mongoose.connect(
-  process.env.MONGODB_URI || "mongodb+srv://balmukundoptico:lets@12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector",
-  {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  }
+  process.env.MONGODB_URI || "mongodb+srv://balmukundoptico:lets%4012help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector"
 ).then(() => console.log('MongoDB Atlas connected'))
  .catch(err => console.error('MongoDB connection error:', err));
 
@@ -73,6 +69,7 @@ const sendPushNotification = async (token, title, body) => {
   }
 };
 
+// Routes
 app.post('/register', async (req, res) => {
   const { name, email, password, role, location, notificationToken } = req.body;
   try {
@@ -241,7 +238,7 @@ app.get('/barcodes/user/:userId', authMiddleware, async (req, res) => {
 app.delete('/barcodes/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const barcode = await Barcode.findByIdAndDelete(req.params.id);
-    if (!barcode) return res.status(404).json({ message: 'Barcode not found' });
+    if (!user) return res.status(404).json({ message: 'Barcode not found' });
     res.json({ message: 'Barcode deleted successfully' });
   } catch (error) {
     res.status(400).json({ message: error.message });
