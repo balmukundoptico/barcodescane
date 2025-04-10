@@ -12,35 +12,13 @@ const Barcode = require('./models/Barcode');
 
 const app = express();
 
-// Enhanced CORS configuration with logging for debugging
-const allowedOrigins = [
-  'http://localhost:8081',
-  'http://localhost:19006',
-  'exp://192.168.31.124:19000',
-  'https://yourfrontendurl.com'
-];
-
-// Middleware to log requests for debugging
-app.use((req, res, next) => {
-  console.log(`Incoming ${req.method} request from ${req.headers.origin}`);
-  next();
-});
-
-// Simplified CORS configuration
+// Simplified CORS configuration (proven working from your other project)
 app.use(cors({
-  origin: allowedOrigins,
+  origin: 'http://localhost:8081', // Allow requests from your React Native app
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
 }));
 
-// Explicit OPTIONS handler
-app.options('*', cors({
-  origin: allowedOrigins,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
 app.use(express.json());
 
 // MongoDB Atlas connection
