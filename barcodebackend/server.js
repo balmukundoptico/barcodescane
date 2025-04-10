@@ -21,11 +21,20 @@ app.use(cors({
 
 app.use(express.json());
 
-// MongoDB Atlas connection (corrected string, removed deprecated options)
-mongoose.connect(
-  process.env.MONGODB_URI || "mongodb+srv://balmukundoptico:lets%4012help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority&appName=job-connector"
-).then(() => console.log('MongoDB Atlas connected'))
- .catch(err => console.error('MongoDB connection error:', err));
+// Comment out MongoDB Atlas connection for later use
+mongoose.connect('mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.mongodb.net', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(() => console.log('MongoDB Atlas connected'))
+  .catch((err) => console.log('MongoDB Atlas connection error:', err));
+
+
+// MongoDB Atlas connection (hardcoded correct string)
+// mongoose.connect(
+//   "mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority"
+// ).then(() => console.log('MongoDB Atlas connected'))
+//  .catch(err => console.error('MongoDB connection error:', err));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 let pointsPerScan = 50;
@@ -238,7 +247,7 @@ app.get('/barcodes/user/:userId', authMiddleware, async (req, res) => {
 app.delete('/barcodes/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const barcode = await Barcode.findByIdAndDelete(req.params.id);
-    if (!user) return res.status(404).json({ message: 'Barcode not found' });
+    if (!barcode) return res.status(404).json({ message: 'Barcode not found' });
     res.json({ message: 'Barcode deleted successfully' });
   } catch (error) {
     res.status(400).json({ message: error.message });
