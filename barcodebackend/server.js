@@ -21,20 +21,18 @@ app.use(cors({
 
 app.use(express.json());
 
-// Comment out MongoDB Atlas connection for later use
+// Test route to verify CORS
+app.get('/test', (req, res) => {
+  res.json({ message: 'Server is live' });
+});
+
+// MongoDB Atlas connection
 mongoose.connect('mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.mongodb.net', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
   .then(() => console.log('MongoDB Atlas connected'))
   .catch((err) => console.log('MongoDB Atlas connection error:', err));
-
-
-// MongoDB Atlas connection (hardcoded correct string)
-// mongoose.connect(
-//   "mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.mongodb.net/barcodescane?retryWrites=true&w=majority"
-// ).then(() => console.log('MongoDB Atlas connected'))
-//  .catch(err => console.error('MongoDB connection error:', err));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 let pointsPerScan = 50;
