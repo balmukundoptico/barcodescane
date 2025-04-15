@@ -9,4 +9,5 @@ const barcodeSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('Barcode', barcodeSchema);
+// Explicitly set collection name to 'barcode'
+module.exports = mongoose.model('Barcode', barcodeSchema, 'barcode');

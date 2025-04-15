@@ -92,39 +92,59 @@ const sendPushNotification = async (token, title, body) => {
 // Routes
 app.post('/register', async (req, res) => {
   const { name, mobile, password, role, location, notificationToken } = req.body;
+  console.log('Register request:', { name, mobile, password: '****', role, location, notificationToken });
   try {
+    // Validate input
     if (!name || !mobile || !password) {
+      console.log('Validation failed: Missing required fields');
       return res.status(400).json({ message: 'Name, mobile, and password are required' });
     }
     if (!/^\d{10}$/.test(mobile)) {
+      console.log('Validation failed: Invalid mobile format', mobile);
       return res.status(400).json({ message: 'Mobile number must be 10 digits' });
     }
+    // Check for existing user
+    const existingUser = await User.findOne({ mobile });
+    if (existingUser) {
+      console.log('Duplicate mobile found:', mobile, 'Existing user:', existingUser);
+      return res.status(400).json({ message: 'Mobile number already exists' });
+    }
+    // Prevent multiple admins
     if (role === 'admin') {
-      // Block additional admin registration
       const adminExists = await User.findOne({ role: 'admin' });
       if (adminExists) {
+        console.log('Admin registration blocked: Admin exists');
         return res.status(403).json({ message: 'Only one admin is allowed. Admin already exists.' });
       }
     }
+    // Hash password and save user
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
       mobile,
       password: hashedPassword,
-      role: role === 'admin' ? 'user' : role, // Force non-admin roles
+      role: role === 'admin' ? 'user' : role,
       location,
       status: role === 'admin' ? 'approved' : 'pending',
       notificationToken,
     });
     await user.save();
+    console.log('User registered successfully:', mobile);
     res.status(201).json({
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
     });
   } catch (error) {
+    console.error('Registration error:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+      details: error
+    });
     if (error.code === 11000) {
+      console.log('MongoDB duplicate key error for mobile:', mobile);
       return res.status(400).json({ message: 'Mobile number already exists' });
     }
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ message: 'Registration failed', error: error.message });
   }
 });
 
