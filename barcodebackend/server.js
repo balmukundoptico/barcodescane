@@ -93,6 +93,12 @@ const sendPushNotification = async (token, title, body) => {
 app.post('/register', async (req, res) => {
   const { name, mobile, password, role, location, notificationToken } = req.body;
   try {
+    if (!name || !mobile || !password) {
+      return res.status(400).json({ message: 'Name, mobile, and password are required' });
+    }
+    if (!/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ message: 'Mobile number must be 10 digits' });
+    }
     if (role === 'admin') {
       // Block additional admin registration
       const adminExists = await User.findOne({ role: 'admin' });
@@ -115,6 +121,9 @@ app.post('/register', async (req, res) => {
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Mobile number already exists' });
+    }
     res.status(400).json({ message: error.message });
   }
 });
@@ -320,8 +329,6 @@ app.get('/settings/points-per-scan', authMiddleware, adminMiddleware, async (req
 app.put('/settings/barcode-range', authMiddleware, adminMiddleware, async (req, res) => {
   const { start, end } = req.body;
   try {
-    // Assuming barcode range is stored globally or in a settings collection
-    // For simplicity, we'll store it in memory (not persistent)
     global.barcodeRange = { start, end };
     res.json({ message: 'Barcode range updated', start, end });
   } catch (error) {
@@ -332,6 +339,22 @@ app.put('/settings/barcode-range', authMiddleware, adminMiddleware, async (req, 
 app.get('/settings/barcode-range', authMiddleware, async (req, res) => {
   try {
     res.json(global.barcodeRange || { start: '0', end: '9999999999999' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/barcodes/counts', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const counts = await Barcode.aggregate([
+      { $group: { _id: '$userId', count: { $sum: 1 } } },
+      { $project: { userId: '$_id', count: 1, _id: 0 } },
+    ]);
+    const countMap = counts.reduce((acc, { userId, count }) => {
+      acc[userId] = count;
+      return acc;
+    }, {});
+    res.json(countMap);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
