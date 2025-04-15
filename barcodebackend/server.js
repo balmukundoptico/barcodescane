@@ -92,22 +92,28 @@ const sendPushNotification = async (token, title, body) => {
 // Routes
 app.post('/register', async (req, res) => {
   const { name, mobile, password, role, location, notificationToken } = req.body;
-  console.log('Register request:', { name, mobile, password: '****', role, location, notificationToken });
+  console.log('Register request received:', { name, mobile, role, location, notificationToken, password: '****' });
   try {
-    // Validate input
+    // Strict input validation
     if (!name || !mobile || !password) {
-      console.log('Validation failed: Missing required fields');
+      console.log('Validation failed: Missing required fields', { name, mobile, password });
       return res.status(400).json({ message: 'Name, mobile, and password are required' });
     }
-    if (!/^\d{10}$/.test(mobile)) {
-      console.log('Validation failed: Invalid mobile format', mobile);
-      return res.status(400).json({ message: 'Mobile number must be 10 digits' });
+    if (typeof mobile !== 'string' || !/^\d{10}$/.test(mobile)) {
+      console.log('Validation failed: Invalid mobile format', { mobile });
+      return res.status(400).json({ message: 'Mobile number must be a 10-digit string' });
     }
     // Check for existing user
     const existingUser = await User.findOne({ mobile });
     if (existingUser) {
-      console.log('Duplicate mobile found:', mobile, 'Existing user:', existingUser);
+      console.log('Duplicate mobile detected:', { mobile, existingUser: { _id: existingUser._id, mobile: existingUser.mobile } });
       return res.status(400).json({ message: 'Mobile number already exists' });
+    }
+    // Verify no null/empty mobiles
+    const nullCheck = await User.findOne({ mobile: { $in: [null, '', undefined] } });
+    if (nullCheck) {
+      console.log('Found problematic document:', nullCheck);
+      return res.status(500).json({ message: 'Database error: Invalid mobile data detected' });
     }
     // Prevent multiple admins
     if (role === 'admin') {
@@ -123,13 +129,13 @@ app.post('/register', async (req, res) => {
       name,
       mobile,
       password: hashedPassword,
-      role: role === 'admin' ? 'user' : role,
+      role: role === 'admin' ? 'user' : role || 'user',
       location,
       status: role === 'admin' ? 'approved' : 'pending',
       notificationToken,
     });
     await user.save();
-    console.log('User registered successfully:', mobile);
+    console.log('User registered successfully:', { mobile, _id: user._id });
     res.status(201).json({
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
     });
@@ -137,11 +143,12 @@ app.post('/register', async (req, res) => {
     console.error('Registration error:', {
       message: error.message,
       code: error.code,
-      stack: error.stack,
-      details: error
+      name: error.name,
+      details: JSON.stringify(error, null, 2),
+      mobileAttempted: mobile
     });
     if (error.code === 11000) {
-      console.log('MongoDB duplicate key error for mobile:', mobile);
+      console.log('MongoDB duplicate key error:', { mobile, error });
       return res.status(400).json({ message: 'Mobile number already exists' });
     }
     res.status(500).json({ message: 'Registration failed', error: error.message });
@@ -347,10 +354,10 @@ app.get('/settings/points-per-scan', authMiddleware, adminMiddleware, async (req
 });
 
 app.put('/settings/barcode-range', authMiddleware, adminMiddleware, async (req, res) => {
-  const { start, end } = req.body;
+  const { points } = req.body;
   try {
-    global.barcodeRange = { start, end };
-    res.json({ message: 'Barcode range updated', start, end });
+    pointsPerScan = points;
+    res.json({ message: 'Points per scan updated', pointsPerScan });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
