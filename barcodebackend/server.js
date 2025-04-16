@@ -11,9 +11,9 @@ const Barcode = require('./models/Barcode');
 
 const app = express();
 
-// Simplified CORS configuration
+// CORS configuration
 app.use(cors({
-  origin: ['http://localhost:8081', 'https://barcodescane-backend.onrender.com'],
+  origin: ['http://localhost:8081', 'https://barcodescane-backend.onrender.com', '*'], // Allow all for testing
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -92,33 +92,45 @@ const sendPushNotification = async (token, title, body) => {
 app.post('/register', async (req, res) => {
   const { name, mobile, password, role, location, notificationToken } = req.body;
   try {
-    // Validate mobile number format
-    if (!mobile || !/^\d{10}$/.test(mobile)) {
+    console.log('Register request received:', { name, mobile, role, location }); // Debug log
+
+    // Validate inputs
+    if (!name || !mobile || !password) {
+      console.log('Missing required fields:', { name, mobile, password });
+      return res.status(400).json({ message: 'Name, mobile, and password are required' });
+    }
+
+    // Validate mobile format
+    if (!/^\d{10}$/.test(mobile)) {
+      console.log('Invalid mobile format:', mobile);
       return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
     }
 
-    // Debug: Log the mobile being checked
-    console.log(`Checking mobile: ${mobile}`);
-
-    // Check for existing mobile number
+    // Check for existing mobile
+    console.log('Checking for existing mobile:', mobile);
     const existingUser = await User.findOne({ mobile });
     if (existingUser) {
-      console.log(`Found existing user: ${JSON.stringify(existingUser)}`);
+      console.log('Existing user found:', {
+        mobile: existingUser.mobile,
+        name: existingUser.name,
+        role: existingUser.role,
+        id: existingUser._id,
+      });
       return res.status(400).json({ message: 'Mobile number already registered' });
     }
 
-    // Debug: Confirm no user found
-    console.log(`No existing user found for mobile: ${mobile}`);
+    console.log('No existing user found for mobile:', mobile);
 
     // Block additional admin registration
     if (role === 'admin') {
       const adminExists = await User.findOne({ role: 'admin' });
       if (adminExists) {
-        console.log('Admin already exists');
+        console.log('Admin registration blocked:', adminExists);
         return res.status(403).json({ message: 'Only one admin is allowed. Admin already exists.' });
       }
     }
 
+    // Hash password and create user
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
@@ -129,15 +141,21 @@ app.post('/register', async (req, res) => {
       status: role === 'admin' ? 'approved' : 'pending',
       notificationToken,
     });
+
     await user.save();
-    console.log(`User saved: ${mobile}`);
+    console.log('User saved successfully:', { mobile, name, role });
+
     res.status(201).json({
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Registration error:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
     if (error.code === 11000) {
-      console.log(`Duplicate key error for mobile: ${mobile}`);
+      console.log('Duplicate key error for mobile:', mobile);
       return res.status(400).json({ message: 'Mobile number already registered' });
     }
     res.status(500).json({ message: 'Registration failed. Please try again.' });
@@ -159,6 +177,7 @@ app.post('/login', async (req, res) => {
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
     res.json({ token, user: { id: user._id, name: user.name, role: user.role, points: user.points, mobile: user.mobile, location: user.location, status: user.status } });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -185,6 +204,7 @@ app.post('/scan', authMiddleware, async (req, res) => {
 
     res.json({ message: 'Barcode scanned successfully', points: user.points });
   } catch (error) {
+    console.error('Scan error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -210,6 +230,7 @@ app.put('/users/:id/status', authMiddleware, adminMiddleware, async (req, res) =
 
     res.json({ message: `User ${status} successfully` });
   } catch (error) {
+    console.error('Update status error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -219,6 +240,7 @@ app.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
     const users = await User.find().select('-password');
     res.json(users);
   } catch (error) {
+    console.error('Get users error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -241,6 +263,7 @@ app.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
     await user.save();
     res.json({ message: 'User updated successfully' });
   } catch (error) {
+    console.error('Update user error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -256,6 +279,7 @@ app.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
     await Barcode.deleteMany({ userId: req.params.id });
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
+    console.error('Delete user error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -280,6 +304,7 @@ app.put('/users/:id/reset-points', authMiddleware, adminMiddleware, async (req, 
 
     res.json({ message: 'Points reset successfully' });
   } catch (error) {
+    console.error('Reset points error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -289,6 +314,7 @@ app.get('/barcodes', authMiddleware, adminMiddleware, async (req, res) => {
     const barcodes = await Barcode.find().populate('userId', 'name mobile');
     res.json(barcodes);
   } catch (error) {
+    console.error('Get barcodes error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -298,6 +324,7 @@ app.get('/barcodes/user/:userId', authMiddleware, async (req, res) => {
     const barcodes = await Barcode.find({ userId: req.params.userId });
     res.json(barcodes);
   } catch (error) {
+    console.error('Get user barcodes error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -308,6 +335,7 @@ app.delete('/barcodes/:id', authMiddleware, adminMiddleware, async (req, res) =>
     if (!barcode) return res.status(404).json({ message: 'Barcode not found' });
     res.json({ message: 'Barcode deleted successfully' });
   } catch (error) {
+    console.error('Delete barcode error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -317,6 +345,7 @@ app.delete('/barcodes', authMiddleware, adminMiddleware, async (req, res) => {
     await Barcode.deleteMany({});
     res.json({ message: 'All barcodes deleted successfully' });
   } catch (error) {
+    console.error('Delete all barcodes error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -326,6 +355,7 @@ app.delete('/barcodes/user/:userId', authMiddleware, adminMiddleware, async (req
     await Barcode.deleteMany({ userId: req.params.userId });
     res.json({ message: 'User barcodes deleted successfully' });
   } catch (error) {
+    console.error('Delete user barcodes error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -336,6 +366,7 @@ app.put('/settings/points-per-scan', authMiddleware, adminMiddleware, async (req
     pointsPerScan = points;
     res.json({ message: 'Points per scan updated', pointsPerScan });
   } catch (error) {
+    console.error('Update points per scan error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -344,6 +375,7 @@ app.get('/settings/points-per-scan', authMiddleware, adminMiddleware, async (req
   try {
     res.json({ points: pointsPerScan });
   } catch (error) {
+    console.error('Get points per scan error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -354,6 +386,7 @@ app.put('/settings/barcode-range', authMiddleware, adminMiddleware, async (req, 
     global.barcodeRange = { start, end };
     res.json({ message: 'Barcode range updated', start, end });
   } catch (error) {
+    console.error('Update barcode range error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -362,6 +395,7 @@ app.get('/settings/barcode-range', authMiddleware, async (req, res) => {
   try {
     res.json(global.barcodeRange || { start: '0', end: '9999999999999' });
   } catch (error) {
+    console.error('Get barcode range error:', error);
     res.status(400).json({ message: error.message });
   }
 });
@@ -393,6 +427,7 @@ app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) =>
     await csvWriter.writeRecords(records);
     res.download('barcodes_export.csv');
   } catch (error) {
+    console.error('Export barcodes error:', error);
     res.status(500).json({ message: 'Failed to export barcodes', error: error.message });
   }
 });
