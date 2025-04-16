@@ -14,7 +14,7 @@ const app = express();
 
 // Simplified CORS configuration
 app.use(cors({
-  origin: 'http://localhost:8081',
+  origin: ['http://localhost:8081', 'https://barcodescane-backend.onrender.com'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -93,16 +93,25 @@ const sendPushNotification = async (token, title, body) => {
 app.post('/register', async (req, res) => {
   const { name, mobile, password, role, location, notificationToken } = req.body;
   try {
+    // Validate mobile number format
     if (!mobile || !/^\d{10}$/.test(mobile)) {
       return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
     }
+
+    // Check for existing mobile number
+    const existingUser = await User.findOne({ mobile });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Mobile number already registered' });
+    }
+
+    // Block additional admin registration
     if (role === 'admin') {
-      // Block additional admin registration
       const adminExists = await User.findOne({ role: 'admin' });
       if (adminExists) {
         return res.status(403).json({ message: 'Only one admin is allowed. Admin already exists.' });
       }
     }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
@@ -118,7 +127,11 @@ app.post('/register', async (req, res) => {
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
     });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error('Registration error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Mobile number already registered' });
+    }
+    res.status(500).json({ message: 'Registration failed. Please try again.' });
   }
 });
 
