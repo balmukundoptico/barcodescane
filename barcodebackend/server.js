@@ -11,9 +11,9 @@ const Barcode = require('./models/Barcode');
 
 const app = express();
 
-// CORS configuration
+// CORS configuration (allow all for debugging)
 app.use(cors({
-  origin: ['http://localhost:8081', 'https://barcodescane-backend.onrender.com', '*'], // Allow all for testing
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -44,7 +44,7 @@ mongoose.connect('mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.m
       console.log('Permanent admin created: krishna');
     }
   })
-  .catch((err) => console.log('MongoDB Atlas connection error:', err));
+  .catch((err) => console.error('MongoDB Atlas connection error:', err));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 let pointsPerScan = 50;
@@ -92,29 +92,37 @@ const sendPushNotification = async (token, title, body) => {
 app.post('/register', async (req, res) => {
   const { name, mobile, password, role, location, notificationToken } = req.body;
   try {
-    console.log('Register request received:', { name, mobile, role, location }); // Debug log
+    // Log full request
+    console.log('Register request:', {
+      name,
+      mobile,
+      role,
+      location,
+      hasPassword: !!password,
+      notificationToken: notificationToken ? '[provided]' : '[none]',
+    });
 
     // Validate inputs
     if (!name || !mobile || !password) {
-      console.log('Missing required fields:', { name, mobile, password });
+      console.log('Validation failed: Missing required fields');
       return res.status(400).json({ message: 'Name, mobile, and password are required' });
     }
 
-    // Validate mobile format
     if (!/^\d{10}$/.test(mobile)) {
-      console.log('Invalid mobile format:', mobile);
+      console.log('Validation failed: Invalid mobile format:', mobile);
       return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
     }
 
     // Check for existing mobile
-    console.log('Checking for existing mobile:', mobile);
-    const existingUser = await User.findOne({ mobile });
+    console.log('Querying for mobile:', mobile);
+    const existingUser = await User.findOne({ mobile }).lean();
     if (existingUser) {
-      console.log('Existing user found:', {
+      console.log('Duplicate mobile found:', {
+        id: existingUser._id,
         mobile: existingUser.mobile,
         name: existingUser.name,
         role: existingUser.role,
-        id: existingUser._id,
+        status: existingUser.status,
       });
       return res.status(400).json({ message: 'Mobile number already registered' });
     }
@@ -125,12 +133,12 @@ app.post('/register', async (req, res) => {
     if (role === 'admin') {
       const adminExists = await User.findOne({ role: 'admin' });
       if (adminExists) {
-        console.log('Admin registration blocked:', adminExists);
+        console.log('Admin registration blocked: Admin exists:', adminExists.mobile);
         return res.status(403).json({ message: 'Only one admin is allowed. Admin already exists.' });
       }
     }
 
-    // Hash password and create user
+    // Create user
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
@@ -143,7 +151,7 @@ app.post('/register', async (req, res) => {
     });
 
     await user.save();
-    console.log('User saved successfully:', { mobile, name, role });
+    console.log('User registered successfully:', { mobile, name, role });
 
     res.status(201).json({
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
@@ -155,7 +163,7 @@ app.post('/register', async (req, res) => {
       stack: error.stack,
     });
     if (error.code === 11000) {
-      console.log('Duplicate key error for mobile:', mobile);
+      console.log('MongoDB duplicate key error for mobile:', mobile);
       return res.status(400).json({ message: 'Mobile number already registered' });
     }
     res.status(500).json({ message: 'Registration failed. Please try again.' });
