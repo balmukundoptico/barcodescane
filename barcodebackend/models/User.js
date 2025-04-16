@@ -2,15 +2,15 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  mobile: { 
+  email: { 
     type: String, 
     required: true, 
     unique: true,
     validate: {
       validator: function(v) {
-        return /^\d{10}$/.test(v);
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
       },
-      message: props => `${props.value} is not a valid 10-digit mobile number!`
+      message: props => `${props.value} is not a valid email!`
     }
   },
   password: { type: String, required: true },
