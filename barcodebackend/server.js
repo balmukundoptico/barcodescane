@@ -93,6 +93,9 @@ const sendPushNotification = async (token, title, body) => {
 app.post('/register', async (req, res) => {
   const { name, mobile, password, role, location, notificationToken } = req.body;
   try {
+    if (!mobile || !/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
+    }
     if (role === 'admin') {
       // Block additional admin registration
       const adminExists = await User.findOne({ role: 'admin' });
@@ -122,6 +125,9 @@ app.post('/register', async (req, res) => {
 app.post('/login', async (req, res) => {
   const { mobile, password, role } = req.body;
   try {
+    if (!mobile || !/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
+    }
     const user = await User.findOne({ mobile, role });
     if (!user) return res.status(400).json({ message: 'Invalid credentials' });
     if (user.status === 'pending') return res.status(403).json({ message: 'Account pending approval' });
@@ -198,6 +204,9 @@ app.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
 app.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   const { name, mobile, location, points } = req.body;
   try {
+    if (mobile && !/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
+    }
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (user.mobile === '7000534581' && user.role === 'admin') {
@@ -320,8 +329,6 @@ app.get('/settings/points-per-scan', authMiddleware, adminMiddleware, async (req
 app.put('/settings/barcode-range', authMiddleware, adminMiddleware, async (req, res) => {
   const { start, end } = req.body;
   try {
-    // Assuming barcode range is stored globally or in a settings collection
-    // For simplicity, we'll store it in memory (not persistent)
     global.barcodeRange = { start, end };
     res.json({ message: 'Barcode range updated', start, end });
   } catch (error) {
