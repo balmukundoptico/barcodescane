@@ -1,4 +1,3 @@
-// barcode/barcodebackend/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -98,16 +97,24 @@ app.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
     }
 
+    // Debug: Log the mobile being checked
+    console.log(`Checking mobile: ${mobile}`);
+
     // Check for existing mobile number
     const existingUser = await User.findOne({ mobile });
     if (existingUser) {
+      console.log(`Found existing user: ${JSON.stringify(existingUser)}`);
       return res.status(400).json({ message: 'Mobile number already registered' });
     }
+
+    // Debug: Confirm no user found
+    console.log(`No existing user found for mobile: ${mobile}`);
 
     // Block additional admin registration
     if (role === 'admin') {
       const adminExists = await User.findOne({ role: 'admin' });
       if (adminExists) {
+        console.log('Admin already exists');
         return res.status(403).json({ message: 'Only one admin is allowed. Admin already exists.' });
       }
     }
@@ -123,12 +130,14 @@ app.post('/register', async (req, res) => {
       notificationToken,
     });
     await user.save();
+    console.log(`User saved: ${mobile}`);
     res.status(201).json({
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
     });
   } catch (error) {
     console.error('Registration error:', error);
     if (error.code === 11000) {
+      console.log(`Duplicate key error for mobile: ${mobile}`);
       return res.status(400).json({ message: 'Mobile number already registered' });
     }
     res.status(500).json({ message: 'Registration failed. Please try again.' });
