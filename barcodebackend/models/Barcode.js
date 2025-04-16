@@ -1,3 +1,4 @@
+// barcode/barcodebackend/models/Barcode.js
 const mongoose = require('mongoose');
 
 const barcodeSchema = new mongoose.Schema({
