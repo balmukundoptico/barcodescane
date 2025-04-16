@@ -11,7 +11,7 @@ const Barcode = require('./models/Barcode');
 
 const app = express();
 
-// CORS configuration
+// CORS configuration (allow all for debugging)
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -28,13 +28,13 @@ mongoose.connect('mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.m
   .then(async () => {
     console.log('MongoDB Atlas connected');
     // Ensure single admin exists
-    const adminEmail = 'krishna@admin.com';
-    const existingAdmin = await User.findOne({ email: adminEmail, role: 'admin' });
+    const adminMobile = '7000534581';
+    const existingAdmin = await User.findOne({ mobile: adminMobile, role: 'admin' });
     if (!existingAdmin) {
       const hashedPassword = await bcrypt.hash('krishna123', 10);
       const admin = new User({
         name: 'krishna',
-        email: adminEmail,
+        mobile: adminMobile,
         password: hashedPassword,
         role: 'admin',
         location: 'bhopal',
@@ -90,51 +90,50 @@ const sendPushNotification = async (token, title, body) => {
 
 // Routes
 app.post('/register', async (req, res) => {
-  const { name, email, password, role, location, notificationToken } = req.body;
+  const { name, mobile, password, role, location, notificationToken } = req.body;
   try {
+    // Log full request
     console.log('Register request:', {
       name,
-      email,
-      role: role || 'not provided',
-      location: location || 'not provided',
+      mobile,
+      role,
+      location,
       hasPassword: !!password,
       notificationToken: notificationToken ? '[provided]' : '[none]',
     });
 
     // Validate inputs
-    if (!name || !email || !password) {
+    if (!name || !mobile || !password) {
       console.log('Validation failed: Missing required fields');
-      return res.status(400).json({ message: 'Name, email, and password are required' });
+      return res.status(400).json({ message: 'Name, mobile, and password are required' });
     }
 
-    // Basic email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      console.log('Validation failed: Invalid email format:', email);
-      return res.status(400).json({ message: 'Invalid email format' });
+    if (!/^\d{10}$/.test(mobile)) {
+      console.log('Validation failed: Invalid mobile format:', mobile);
+      return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
     }
 
-    // Check for existing email
-    console.log('Checking email:', email);
-    const existingUser = await User.findOne({ email }).lean();
+    // Check for existing mobile
+    console.log('Querying for mobile:', mobile);
+    const existingUser = await User.findOne({ mobile }).lean();
     if (existingUser) {
-      console.log('Duplicate email detected:', {
+      console.log('Duplicate mobile found:', {
         id: existingUser._id,
-        email: existingUser.email,
+        mobile: existingUser.mobile,
         name: existingUser.name,
         role: existingUser.role,
         status: existingUser.status,
-        createdAt: existingUser.createdAt,
       });
-      return res.status(400).json({ message: 'Email already registered' });
+      return res.status(400).json({ message: 'Mobile number already registered' });
     }
 
-    console.log('No existing user found for email:', email);
+    console.log('No existing user found for mobile:', mobile);
 
     // Block additional admin registration
     if (role === 'admin') {
       const adminExists = await User.findOne({ role: 'admin' });
       if (adminExists) {
-        console.log('Admin registration blocked:', adminExists.email);
+        console.log('Admin registration blocked: Admin exists:', adminExists.mobile);
         return res.status(403).json({ message: 'Only one admin is allowed. Admin already exists.' });
       }
     }
@@ -143,16 +142,16 @@ app.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
-      email,
+      mobile,
       password: hashedPassword,
-      role: role === 'admin' ? 'user' : role,
+      role: role === 'admin' ? 'user' : role, // Force non-admin roles
       location,
       status: role === 'admin' ? 'approved' : 'pending',
       notificationToken,
     });
 
     await user.save();
-    console.log('User registered:', { email, name, role });
+    console.log('User registered successfully:', { mobile, name, role });
 
     res.status(201).json({
       message: role === 'user' ? 'Your account is pending approval by admin.' : 'User registered successfully.',
@@ -164,27 +163,27 @@ app.post('/register', async (req, res) => {
       stack: error.stack,
     });
     if (error.code === 11000) {
-      console.log('MongoDB duplicate key error for email:', email);
-      return res.status(400).json({ message: 'Email already registered' });
+      console.log('MongoDB duplicate key error for mobile:', mobile);
+      return res.status(400).json({ message: 'Mobile number already registered' });
     }
     res.status(500).json({ message: 'Registration failed. Please try again.' });
   }
 });
 
 app.post('/login', async (req, res) => {
-  const { email, password, role } = req.body;
+  const { mobile, password, role } = req.body;
   try {
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
+    if (!mobile || !/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
     }
-    const user = await User.findOne({ email, role });
+    const user = await User.findOne({ mobile, role });
     if (!user) return res.status(400).json({ message: 'Invalid credentials' });
     if (user.status === 'pending') return res.status(403).json({ message: 'Account pending approval' });
     if (user.status === 'disapproved') return res.status(403).json({ message: 'Account disapproved' });
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role, points: user.points, email: user.email, location: user.location, status: user.status } });
+    res.json({ token, user: { id: user._id, name: user.name, role: user.role, points: user.points, mobile: user.mobile, location: user.location, status: user.status } });
   } catch (error) {
     console.error('Login error:', error);
     res.status(400).json({ message: error.message });
@@ -223,7 +222,7 @@ app.put('/users/:id/status', authMiddleware, adminMiddleware, async (req, res) =
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.email === 'krishna@admin.com' && user.role === 'admin') {
+    if (user.mobile === '7000534581' && user.role === 'admin') {
       return res.status(403).json({ message: 'Cannot modify permanent admin status.' });
     }
     user.status = status;
@@ -255,27 +254,24 @@ app.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
 });
 
 app.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  const { name, email, location, points } = req.body;
+  const { name, mobile, location, points } = req.body;
   try {
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
+    if (mobile && !/^\d{10}$/.test(mobile)) {
+      return res.status(400).json({ message: 'Invalid mobile number. Must be 10 digits.' });
     }
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.email === 'krishna@admin.com' && user.role === 'admin') {
+    if (user.mobile === '7000534581' && user.role === 'admin') {
       return res.status(403).json({ message: 'Cannot modify permanent admin.' });
     }
     user.name = name || user.name;
-    user.email = email || user.email;
+    user.mobile = mobile || user.mobile;
     user.location = location || user.location;
     user.points = points !== undefined ? points : user.points;
     await user.save();
     res.json({ message: 'User updated successfully' });
   } catch (error) {
     console.error('Update user error:', error);
-    if (error.code === 11000) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
     res.status(400).json({ message: error.message });
   }
 });
@@ -284,7 +280,7 @@ app.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.email === 'krishna@admin.com' && user.role === 'admin') {
+    if (user.mobile === '7000534581' && user.role === 'admin') {
       return res.status(403).json({ message: 'Cannot delete permanent admin.' });
     }
     await User.findByIdAndDelete(req.params.id);
@@ -300,7 +296,7 @@ app.put('/users/:id/reset-points', authMiddleware, adminMiddleware, async (req, 
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.email === 'krishna@admin.com' && user.role === 'admin') {
+    if (user.mobile === '7000534581' && user.role === 'admin') {
       return res.status(403).json({ message: 'Cannot reset points of permanent admin.' });
     }
     user.points = 0;
@@ -323,7 +319,7 @@ app.put('/users/:id/reset-points', authMiddleware, adminMiddleware, async (req, 
 
 app.get('/barcodes', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const barcodes = await Barcode.find().populate('userId', 'name email');
+    const barcodes = await Barcode.find().populate('userId', 'name mobile');
     res.json(barcodes);
   } catch (error) {
     console.error('Get barcodes error:', error);
@@ -414,13 +410,13 @@ app.get('/settings/barcode-range', authMiddleware, async (req, res) => {
 
 app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const barcodes = await Barcode.find().populate('userId', 'name email');
+    const barcodes = await Barcode.find().populate('userId', 'name mobile');
     const csvWriter = createObjectCsvWriter({
       path: 'barcodes_export.csv',
       header: [
         { id: 'value', title: 'Barcode Value' },
         { id: 'userName', title: 'User Name' },
-        { id: 'userEmail', title: 'User Email' },
+        { id: 'userMobile', title: 'User Mobile' },
         { id: 'pointsAwarded', title: 'Points Awarded' },
         { id: 'location', title: 'Location' },
         { id: 'timestamp', title: 'Timestamp' },
@@ -430,7 +426,7 @@ app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) =>
     const records = barcodes.map(barcode => ({
       value: barcode.value,
       userName: barcode.userId.name,
-      userEmail: barcode.userId.email,
+      userMobile: barcode.userId.mobile,
       pointsAwarded: barcode.pointsAwarded,
       location: barcode.location,
       timestamp: barcode.createdAt.toISOString(),
@@ -441,17 +437,6 @@ app.get('/export-barcodes', authMiddleware, adminMiddleware, async (req, res) =>
   } catch (error) {
     console.error('Export barcodes error:', error);
     res.status(500).json({ message: 'Failed to export barcodes', error: error.message });
-  }
-});
-
-app.get('/debug/users', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const users = await User.find({}, { _id: 1, email: 1, name: 1, role: 1, status: 1, createdAt: 1 }).lean();
-    console.log('Fetched users for debug:', users);
-    res.json(users);
-  } catch (error) {
-    console.error('Debug users error:', error);
-    res.status(500).json({ message: 'Failed to fetch users' });
   }
 });
 
