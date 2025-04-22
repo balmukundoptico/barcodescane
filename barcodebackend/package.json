@@ -16,9 +16,11 @@
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "csv-writer": "^1.6.0",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "expo-server-sdk": "^3.14.0",
     "express": "^5.1.0",
+    "express-validator": "^7.2.1",
+    "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.13.2"
   }
