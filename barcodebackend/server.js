@@ -25,8 +25,8 @@ app.use(
 // MongoDB Atlas connection
 // Replace <username>, <password>, and cluster0.mongodb.net with your MongoDB Atlas credentials
 // MongoDB Atlas connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/barcodeapp', {
-  // mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.mongodb.net/barcodeapp', {
+// mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/barcodeapp', {
+mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://balmukundoptico:lets12help@job-connector.exb7v.mongodb.net/barcodeapp', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
