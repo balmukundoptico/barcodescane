@@ -150,7 +150,7 @@ app.post('/login', validateLogin, handleValidationErrors, async (req, res) => {
       });
     }
     const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, {
-      expiresIn: '1h',
+      expiresIn: '1000h',
     });
     res.json({
       token,
